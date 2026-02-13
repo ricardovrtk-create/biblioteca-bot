@@ -12,41 +12,44 @@ def home():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.json
-    mensagem = data.get("message", "")
+    try:
+        data = request.json
+        mensagem = data.get("message", "")
 
-    prompt = f"""
-Você é o assistente virtual da Biblioteca do IME-USP.
+        prompt = f"""
+        Você é o assistente virtual da Biblioteca do IME-USP.
+        Responda apenas perguntas relacionadas à biblioteca.
+        Pergunta: {mensagem}
+        """
 
-Responda apenas perguntas relacionadas à biblioteca.
-Se não souber ou não for sobre a biblioteca, diga que não possui essa informação.
+        response = requests.post(
+            "https://api.openai.com/v1/completions",
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "gpt-4",
+                "prompt": prompt,
+                "max_tokens": 100
+            }
+        )
 
-Informações oficiais:
-- Horário: segunda a sexta, das 8h às 18h.
-- Empréstimo: apenas para usuários com vínculo ativo com a USP.
-- Renovação: feita pelo sistema institucional.
-- Usuários externos: apenas consulta local.
+        # Verifique se a resposta foi bem-sucedida
+        if response.status_code != 200:
+            return jsonify({"error": f"Erro na API da OpenAI: {response.text}"}), 500
 
-Pergunta:
-{mensagem}
-"""
+        # Tente acessar o campo "choices" de maneira segura
+        response_data = response.json()
+        if "choices" not in response_data:
+            return jsonify({"error": "Resposta inesperada da OpenAI: 'choices' não encontrado"}), 500
 
-    response = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "model": "gpt-4o-mini",
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.2
-        }
-    )
-
-    resposta_texto = response.json()["choices"][0]["message"]["content"]
-
-    return jsonify({"text": resposta_texto})
+        resposta_texto = response_data["choices"][0]["text"]
+        
+        return jsonify({"text": resposta_texto})
+    
+    except Exception as e:
+        return jsonify({"error": f"Erro no servidor: {str(e)}"}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
